@@ -261,9 +261,16 @@ contains
     real(kind_phys),    intent(in)    :: photolysis_wavelength_grid_interfaces(:)          ! nm
     real(kind_phys),    intent(in)    :: extraterrestrial_flux(:)                          ! photons cm-2 s-1 nm-1
     real(kind_phys),    intent(in)    :: standard_gravitational_acceleration               ! m s-2
+    real(kind_phys),    intent(in)    :: fixed_species_density                             ! molecule cm-3
+    real(kind_phys),    intent(in)    :: species_volume_mixing_ratio                       ! mol mol-1
+    real(kind_phys),    intent(in)    :: above_column_density                              ! molecule cm-2
+    integer,            intent(in)    :: index_air
+    integer,            intent(in)    :: index_O2
+    integer,            intent(in)    :: index_O3
     real(kind_phys),    intent(inout) :: rate_parameters(:,:,:)                            ! various units (column, layer, reaction)
     character(len=512), intent(out)   :: errmsg
     integer,            intent(out)   :: errcode
+
 
     ! local variables
     real(kind_phys), dimension(size(geopotential_height_wrt_surface_at_midpoint, dim = 2))  :: height_midpoints
@@ -303,6 +310,15 @@ contains
                                    surface_temperature(i_col), errmsg, errcode )
       if (errcode /= 0) return
 
+      !!!!!!
+      !!!!!!
+      !!!!!
+      call set_gas_species_values( air_profile, oxygen_profile, ozone_profile,  &
+            fixed_species_density, species_volume_mixing, above_column_density, &
+            index_air, index_O2, index_O3, errmsg, errcode )
+
+      !!!!!
+      !!!
       ! temporary values until these are available from the host model
       solar_zenith_angle = 0.0_kind_phys
       earth_sun_distance = 1.0_kind_phys

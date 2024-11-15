@@ -9,9 +9,8 @@ module musica_ccpp_tuvx
   use musica_util,          only: mappings_t, index_mappings_t
 
   implicit none
-  private
-
   public :: tuvx_init, tuvx_run, tuvx_final
+  private :: reset_tuvx_map_state, cleanup_tuvx_resources
 
   type(tuvx_t),           pointer :: tuvx => null()
   type(grid_t),           pointer :: height_grid => null()
@@ -19,40 +18,29 @@ module musica_ccpp_tuvx
   type(profile_t),        pointer :: temperature_profile => null()
   type(profile_t),        pointer :: surface_albedo_profile => null()
   type(profile_t),        pointer :: extraterrestrial_flux_profile => null()
-  type(profile_t),        pointer :: air_flux_profile => null()
+  type(profile_t),        pointer :: air_profile => null()
   type(profile_t),        pointer :: O2_flux_profile => null()
   type(profile_t),        pointer :: O3_flux_profile => null()
   type(index_mappings_t), pointer :: photolysis_rate_constants_mapping => null( )
   integer                         :: number_of_photolysis_rate_constants = 0
-
+  
 contains
 
-  !> This is a helper subroutine created to deallocate objects associated with TUV-x
-  subroutine tuvx_deallocate()
-    use musica_tuvx, only: tuvx_t, grid_map_t, profile_map_t, radiator_map_t, &
-    grid_t, profile_t
+  subroutine reset_tuvx_map_state( grids, profiles, radiators )
+    use musica_tuvx, only: grid_map_t, profile_map_t, radiator_map_t
 
-    type(tuvx_t),         pointer :: tuvx
     type(grid_map_t),     pointer :: grids
     type(profile_map_t),  pointer :: profiles
     type(radiator_map_t), pointer :: radiators
-    type(grid_t),         pointer :: height_grid
-    type(grid_t),         pointer :: wavelength_grid
-    type(profile_t),      pointer :: temperature_profile
-    type(profile_t),      pointer :: surface_albedo_profile
-    type(profile_t),      pointer :: extraterrestrial_flux_profile
-    type(profile_t),      pointer :: air_flux_profile
-    type(profile_t),      pointer :: O2_flux_profile
-    type(profile_t),      pointer :: O3_flux_profile
 
     if (associated( grids )) deallocate( grids )
     if (associated( profiles )) deallocate( profiles )
     if (associated( radiators )) deallocate( radiators )
 
-    if (associated( tuvx )) then
-      deallocate( tuvx )
-      tuvx => null()
-    end if
+  end subroutine reset_tuvx_map_state
+
+  !> This is a helper subroutine created to deallocate objects associated with TUV-x
+  subroutine cleanup_tuvx_resources()
 
     if (associated( height_grid )) then
       deallocate( height_grid )
@@ -94,7 +82,12 @@ contains
       O3_profile => null()
     end if
 
-  end subroutine tuvx_deallocate
+    if (associated( photolysis_rate_constants_mapping )) then
+      deallocate( photolysis_rate_constants_mapping )
+      photolysis_rate_constants_mapping => null()
+    end if
+
+  end subroutine cleanup_tuvx_resources
 
   !> Initializes TUV-x
   subroutine tuvx_init(vertical_layer_dimension, vertical_interface_dimension, &
@@ -103,7 +96,6 @@ contains
     use musica_tuvx, only: grid_map_t, profile_map_t, radiator_map_t
     use musica_util, only: error_t, configuration_t
     use musica_ccpp_namelist, only: filename_of_tuvx_micm_mapping_configuration
-    use musica_ccpp_tuvx_util, only: tuvx_deallocate
     use musica_ccpp_tuvx_height_grid, &
       only: create_height_grid, height_grid_label, height_grid_unit
     use musica_ccpp_tuvx_wavelength_grid, &
@@ -139,81 +131,80 @@ contains
     height_grid => create_height_grid( vertical_layer_dimension, &
         vertical_interface_dimension, errmsg, errcode )
     if (errcode /= 0) then
-      deallocate( grids )
+      call reset_tuvx_map_state( grids, null(), null() )
       return
     endif
 
     call grids%add( height_grid, error )
     if (has_error_occurred( error, errmsg, errcode )) then
-      call tuvx_deallocate( grids, null(), null(), null(), height_grid, null(), &
-                            null(), null(), null() )
+      call reset_tuvx_map_state( grids, null(), null() )
+      call cleanup_tuvx_resources()
       return
     end if
 
     wavelength_grid => create_wavelength_grid( wavelength_grid_interfaces, &
                                                errmsg, errcode )
     if (errcode /= 0) then
-      call tuvx_deallocate( grids, null(), null(), null(), height_grid, null(), &
-                            null(), null(), null() )
+      call reset_tuvx_map_state( grids, null(), null() )
+      call cleanup_tuvx_resources()
       return
     endif
 
     call grids%add( wavelength_grid, error )
     if (has_error_occurred( error, errmsg, errcode )) then
-      call tuvx_deallocate( grids, null(), null(), null(), height_grid, &
-                            wavelength_grid, null(), null(), null() )
+      call reset_tuvx_map_state( grids, null(), null() )
+      call cleanup_tuvx_resources()
       return
     end if
 
     profiles => profile_map_t( error )
     if (has_error_occurred( error, errmsg, errcode )) then
-      call tuvx_deallocate( grids, null(), null(), null(), height_grid, &
-                            wavelength_grid, null(), null(), null() )
+      call reset_tuvx_map_state( grids, null(), null() )
+      call cleanup_tuvx_resources()
       return
     end if
 
     temperature_profile => create_temperature_profile( height_grid, errmsg, errcode )
     if (errcode /= 0) then
-      call tuvx_deallocate( grids, profiles, null(), null(), height_grid, &
-                            wavelength_grid, null(), null(), null() )
+      call reset_tuvx_map_state( grids, profiles, null() )
+      call cleanup_tuvx_resources()
       return
     endif
 
     call profiles%add( temperature_profile, error )
     if (has_error_occurred( error, errmsg, errcode )) then
-      call tuvx_deallocate( grids, profiles, null(), null(), height_grid, &
-                            wavelength_grid, temperature_profile, null(), null() )
+      call reset_tuvx_map_state( grids, profiles, null() )
+      call cleanup_tuvx_resources()
       return
     end if
 
     surface_albedo_profile => create_surface_albedo_profile( wavelength_grid, &
                                                              errmsg, errcode )
     if (errcode /= 0) then
-      call tuvx_deallocate( grids, profiles, null(), null(), height_grid, &
-                            wavelength_grid, temperature_profile, null(), null() )
+      call reset_tuvx_map_state( grids, profiles, null() )
+      call cleanup_tuvx_resources()
       return
     endif
 
     call profiles%add( surface_albedo_profile, error )
     if (has_error_occurred( error, errmsg, errcode )) then
-      call tuvx_deallocate( grids, profiles, null(), null(), height_grid, &
-            wavelength_grid, temperature_profile, surface_albedo_profile, null() )
+      call reset_tuvx_map_state( grids, profiles, null() )
+      call cleanup_tuvx_resources()
       return
     end if
 
     extraterrestrial_flux_profile => create_extraterrestrial_flux_profile( &
                 wavelength_grid, wavelength_grid_interfaces, errmsg, errcode )
     if (errcode /= 0) then
-      call tuvx_deallocate( grids, profiles, null(), null(), height_grid, &
-            wavelength_grid, temperature_profile, surface_albedo_profile, null() )
+      call reset_tuvx_map_state( grids, profiles, null() )
+      call cleanup_tuvx_resources()
       return
     endif
 
     call profiles%add( extraterrestrial_flux_profile, error )
     if (has_error_occurred( error, errmsg, errcode )) then
-      call tuvx_deallocate( grids, profiles, null(), null(), height_grid, &
-            wavelength_grid, temperature_profile, surface_albedo_profile, &
-            extraterrestrial_flux_profile )
+      call reset_tuvx_map_state( grids, profiles, null() )
+      call cleanup_tuvx_resources()
       return
     end if
 
@@ -237,89 +228,106 @@ contains
     !!!
     radiators => radiator_map_t( error )
     if (has_error_occurred( error, errmsg, errcode )) then
-      call tuvx_deallocate( grids, profiles, null(), null(), height_grid, &
-            wavelength_grid, temperature_profile, surface_albedo_profile, &
-            extraterrestrial_flux_profile )
+      call reset_tuvx_map_state( grids, profiles, null() )
+      call cleanup_tuvx_resources()
       return
     end if
 
     tuvx => tuvx_t( trim(filename_of_tuvx_configuration), grids, profiles, &
                     radiators, error )
     if (has_error_occurred( error, errmsg, errcode )) then
-      call tuvx_deallocate( grids, profiles, radiators, null(), height_grid, &
-            wavelength_grid, temperature_profile, surface_albedo_profile, &
-            extraterrestrial_flux_profile )
+      call reset_tuvx_map_state( grids, profiles, radiators )
+      call cleanup_tuvx_resources()
       return
     end if
 
-    call tuvx_deallocate( grids, profiles, radiators, null(), height_grid, &
-          wavelength_grid, temperature_profile, surface_albedo_profile, &
-          extraterrestrial_flux_profile )
+    ! Gets resources associated with TUV-x from tuvx
+    call reset_tuvx_map_state( grids, profiles, radiators )
+    call cleanup_tuvx_resources()
 
     grids => tuvx%get_grids( error )
-    if (has_error_occurred( error, errmsg, errcode )) return
+    if (has_error_occurred( error, errmsg, errcode )) then
+      deallocate( tuvx )
+      return
+    end if
 
     height_grid => grids%get( height_grid_label, height_grid_unit, error )
     if (has_error_occurred( error, errmsg, errcode )) then
-      call tuvx_deallocate( grids, null(), null(), tuvx, null(), null(), &
-                            null(), null(), null() )
+      deallocate( tuvx )
+      call reset_tuvx_map_state( grids, null(), null() )
       return
     end if
 
     wavelength_grid => grids%get( wavelength_grid_label, wavelength_grid_unit, &
                                   error )
     if (has_error_occurred( error, errmsg, errcode )) then
-      call tuvx_deallocate( grids, null(), null(), tuvx, height_grid, null(), &
-                            null(), null(), null() )
+      deallocate( tuvx )
+      call reset_tuvx_map_state( grids, null(), null() )
+      call cleanup_tuvx_resources()
       return
     end if
 
     profiles => tuvx%get_profiles( error )
     if (has_error_occurred( error, errmsg, errcode )) then
-      call tuvx_deallocate( grids, null(), null(), tuvx, height_grid, &
-            wavelength_grid, null(), null(), null() )
+      deallocate( tuvx )
+      call reset_tuvx_map_state( grids, null(), null() )
+      call cleanup_tuvx_resources()
       return
     end if
 
     temperature_profile => profiles%get( temperature_label, temperature_unit, error )
     if (has_error_occurred( error, errmsg, errcode )) then
-      call tuvx_deallocate( grids, profiles, null(), tuvx, height_grid, &
-            wavelength_grid, null(), null(), null() )
+      deallocate( tuvx )
+      call reset_tuvx_map_state( grids, profiles, null() )
+      call cleanup_tuvx_resources()
       return
     end if
 
     surface_albedo_profile => profiles%get( surface_albedo_label, surface_albedo_unit, error )
     if (has_error_occurred( error, errmsg, errcode )) then
-      call tuvx_deallocate( grids, profiles, null(), tuvx, height_grid, &
-            wavelength_grid, temperature_profile, null(), null() )
+      deallocate( tuvx )
+      call reset_tuvx_map_state( grids, profiles, null() )
+      call cleanup_tuvx_resources()
       return
     end if
 
     extraterrestrial_flux_profile => &
       profiles%get( extraterrestrial_flux_label, extraterrestrial_flux_unit, error )
     if (has_error_occurred( error, errmsg, errcode )) then
-      call tuvx_deallocate( grids, profiles, null(), tuvx, height_grid, &
-            wavelength_grid, temperature_profile, surface_albedo_profile, null() )
+      deallocate( tuvx )
+      call reset_tuvx_map_state( grids, profiles, null() )
+      call cleanup_tuvx_resources()
       return
     end if
 
-    call tuvx_deallocate( grids, profiles, null(), null(), null(), null(), &
-                          null(), null(), null() )
+    call reset_tuvx_map_state( grids, profiles, null() )
 
+    ! 'photolysis_rate_constants_ordering' is a local variable
     photolysis_rate_constants_ordering => &
         tuvx%get_photolysis_rate_constants_ordering( error )
-    if (has_error_occurred( error, errmsg, errcode )) return
+    if (has_error_occurred( error, errmsg, errcode )) then
+      deallocate( tuvx )
+      return
+    end if
     number_of_photolysis_rate_constants = photolysis_rate_constants_ordering%size()
 
     call config%load_from_file( trim(filename_of_tuvx_micm_mapping_configuration), error )
-    if (has_error_occurred( error, errmsg, errcode )) return
+    if (has_error_occurred( error, errmsg, errcode )) then
+      deallocate( tuvx )
+      deallocate( photolysis_rate_constants_ordering )
+      return
+    end if
 
     photolysis_rate_constants_mapping => &
         index_mappings_t( config, photolysis_rate_constants_ordering, &
                           micm_rate_parameter_ordering, error )
+    if (has_error_occurred( error, errmsg, errcode )) then
+      deallocate( tuvx )
+      deallocate( photolysis_rate_constants_ordering )
+      return
+    end if
+
     deallocate( photolysis_rate_constants_ordering )
-    photolysis_rate_constants_ordering => null()
-    if (has_error_occurred( error, errmsg, errcode )) return
 
   end subroutine tuvx_init
 
@@ -434,22 +442,18 @@ contains
 
   !> Finalizes TUV-x
   subroutine tuvx_final(errmsg, errcode)
-    use musica_ccpp_tuvx_util, only: tuvx_deallocate
-
     character(len=512), intent(out) :: errmsg
     integer,            intent(out) :: errcode
 
     errmsg = ''
     errcode = 0
 
-    call tuvx_deallocate(null(), null(), null(), tuvx, height_grid, &
-                    wavelength_grid, temperature_profile,      &
-                    surface_albedo_profile, extraterrestrial_flux_profile)
-
-    if (associated( photolysis_rate_constants_mapping )) then
-      deallocate( photolysis_rate_constants_mapping )
-      photolysis_rate_constants_mapping => null()
+    if (associated( tuvx )) then
+      deallocate( tuvx )
+      tuvx => null()
     end if
+
+    call cleanup_tuvx_resources()
 
   end subroutine tuvx_final
 

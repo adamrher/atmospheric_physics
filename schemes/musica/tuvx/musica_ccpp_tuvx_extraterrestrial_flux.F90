@@ -53,7 +53,7 @@ contains
   !> Sets TUV-x extraterrestrial flux midpoints
   !
   ! Extraterrestrial flux is read from data files and interpolated to the
-  ! TUV-x wavelength grid. CAM ET Flux values are multiplied by the
+  ! TUV-x wavelength grid. CAM extraterrestrial flux values are multiplied by the
   ! width of the wavelength bins to get the TUV-x units of photon cm-2 s-1
   !
   ! TUV-x only uses mid-point values for extraterrestrial flux
@@ -76,15 +76,16 @@ contains
     type(error_t)   :: error
     real(kind_phys) :: midpoints(num_wavelength_bins_)
 
-    if (num_wavelength_bins_ <= DEFAULT_NUM_WAVELENGTH_BINS) then
-      errmsg = "[MUSICA Error] Invalid size of TUV-x wavelength bins."
+    if (.not. allocated(wavelength_grid_interfaces_)) then
+      errmsg = "[MUSICA Error] Failed to allocate the TUV-x wavelength grid interface array"
       errcode = 1
       return
     end if
 
-    if (.not. allocated(wavelength_grid_interfaces_)) then
-      errmsg = "[MUSICA Error] Failed to allocate the TUV-x wavelength grid interface array"
+    if (num_wavelength_bins_ <= DEFAULT_NUM_WAVELENGTH_BINS) then
+      errmsg = "[MUSICA Error] Invalid size of TUV-x wavelength bins."
       errcode = 1
+      deallocate( wavelength_grid_interfaces_ )
       return
     end if
 
@@ -98,9 +99,12 @@ contains
                  - wavelength_grid_interfaces_(1 :num_wavelength_bins_) )
 
     call profile%set_midpoint_values( midpoints, error)
-    if ( has_error_occurred( error, errmsg, errcode ) ) return
+    if ( has_error_occurred( error, errmsg, errcode ) ) then
+      deallocate( wavelength_grid_interfaces_ )
+      return
+    end if
 
-    deallocate(wavelength_grid_interfaces_)
+    deallocate( wavelength_grid_interfaces_ )
 
   end subroutine set_extraterrestrial_flux_values
 

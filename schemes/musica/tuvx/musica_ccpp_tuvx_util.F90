@@ -22,6 +22,9 @@ contains
     type(profile_t),      pointer :: temperature_profile
     type(profile_t),      pointer :: surface_albedo_profile
     type(profile_t),      pointer :: extraterrestrial_flux_profile
+    type(profile_t),      pointer :: air_flux_profile
+    type(profile_t),      pointer :: O2_flux_profile
+    type(profile_t),      pointer :: O3_flux_profile
 
     if (associated( grids )) deallocate( grids )
     if (associated( profiles )) deallocate( profiles )
@@ -55,6 +58,21 @@ contains
     if (associated( extraterrestrial_flux_profile )) then
       deallocate( extraterrestrial_flux_profile )
       extraterrestrial_flux_profile => null()
+    end if
+
+    if (associated( air_profile )) then
+      deallocate( air_profile )
+      air_profile => null()
+    end if
+
+    if (associated( O2_profile )) then
+      deallocate( O2_profile )
+      O2_profile => null()
+    end if
+
+    if (associated( O3_profile )) then
+      deallocate( O3_profile )
+      O3_profile => null()
     end if
 
   end subroutine tuvx_deallocate

@@ -13,17 +13,88 @@ module musica_ccpp_tuvx
 
   public :: tuvx_init, tuvx_run, tuvx_final
 
-  type(tuvx_t),    pointer :: tuvx => null()
-  type(grid_t),    pointer :: height_grid => null()
-  type(grid_t),    pointer :: wavelength_grid => null()
-  type(profile_t), pointer :: temperature_profile => null()
-  type(profile_t), pointer :: surface_albedo_profile => null()
-  type(profile_t), pointer :: extraterrestrial_flux_profile => null()
-
+  type(tuvx_t),           pointer :: tuvx => null()
+  type(grid_t),           pointer :: height_grid => null()
+  type(grid_t),           pointer :: wavelength_grid => null()
+  type(profile_t),        pointer :: temperature_profile => null()
+  type(profile_t),        pointer :: surface_albedo_profile => null()
+  type(profile_t),        pointer :: extraterrestrial_flux_profile => null()
+  type(profile_t),        pointer :: air_flux_profile => null()
+  type(profile_t),        pointer :: O2_flux_profile => null()
+  type(profile_t),        pointer :: O3_flux_profile => null()
   type(index_mappings_t), pointer :: photolysis_rate_constants_mapping => null( )
-  integer :: number_of_photolysis_rate_constants = 0
+  integer                         :: number_of_photolysis_rate_constants = 0
 
 contains
+
+  !> This is a helper subroutine created to deallocate objects associated with TUV-x
+  subroutine tuvx_deallocate()
+    use musica_tuvx, only: tuvx_t, grid_map_t, profile_map_t, radiator_map_t, &
+    grid_t, profile_t
+
+    type(tuvx_t),         pointer :: tuvx
+    type(grid_map_t),     pointer :: grids
+    type(profile_map_t),  pointer :: profiles
+    type(radiator_map_t), pointer :: radiators
+    type(grid_t),         pointer :: height_grid
+    type(grid_t),         pointer :: wavelength_grid
+    type(profile_t),      pointer :: temperature_profile
+    type(profile_t),      pointer :: surface_albedo_profile
+    type(profile_t),      pointer :: extraterrestrial_flux_profile
+    type(profile_t),      pointer :: air_flux_profile
+    type(profile_t),      pointer :: O2_flux_profile
+    type(profile_t),      pointer :: O3_flux_profile
+
+    if (associated( grids )) deallocate( grids )
+    if (associated( profiles )) deallocate( profiles )
+    if (associated( radiators )) deallocate( radiators )
+
+    if (associated( tuvx )) then
+      deallocate( tuvx )
+      tuvx => null()
+    end if
+
+    if (associated( height_grid )) then
+      deallocate( height_grid )
+      height_grid => null()
+    end if
+
+    if (associated( wavelength_grid )) then
+      deallocate( wavelength_grid )
+      wavelength_grid => null()
+    end if
+
+    if (associated( temperature_profile )) then
+      deallocate( temperature_profile )
+      temperature_profile => null()
+    end if
+
+    if (associated( surface_albedo_profile )) then
+      deallocate( surface_albedo_profile )
+      surface_albedo_profile => null()
+    end if
+
+    if (associated( extraterrestrial_flux_profile )) then
+      deallocate( extraterrestrial_flux_profile )
+      extraterrestrial_flux_profile => null()
+    end if
+
+    if (associated( air_profile )) then
+      deallocate( air_profile )
+      air_profile => null()
+    end if
+
+    if (associated( O2_profile )) then
+      deallocate( O2_profile )
+      O2_profile => null()
+    end if
+
+    if (associated( O3_profile )) then
+      deallocate( O3_profile )
+      O3_profile => null()
+    end if
+
+  end subroutine tuvx_deallocate
 
   !> Initializes TUV-x
   subroutine tuvx_init(vertical_layer_dimension, vertical_interface_dimension, &
@@ -44,6 +115,8 @@ contains
     use musica_ccpp_tuvx_extraterrestrial_flux, &
       only: create_extraterrestrial_flux_profile, extraterrestrial_flux_label, &
             extraterrestrial_flux_unit
+    use musica_ccpp_tuvx_gas_species_profile, only: create_gas_species_profiles, &
+        air_label, air_unit, O2_label, O2_unit, O3_label, O3_unit
 
     integer,            intent(in)  :: vertical_layer_dimension      ! (count)
     integer,            intent(in)  :: vertical_interface_dimension  ! (count)
@@ -144,6 +217,24 @@ contains
       return
     end if
 
+    !!!
+    !!!
+    call create_gas_species_profiles( air_profile, O2_profile, O3_profile, &
+                                      height_grid, errmsg, errcode )
+    if (errcode /= 0) then
+      call tuvx_deallocate( )
+      return
+    endif
+
+    call profiles%add( extraterrestrial_flux_profile, error )
+    if (has_error_occurred( error, errmsg, errcode )) then
+      call tuvx_deallocate( grids, profiles, null(), null(), height_grid, &
+            wavelength_grid, temperature_profile, surface_albedo_profile, &
+            extraterrestrial_flux_profile )
+      return
+    end if
+    !!!
+    !!!
     radiators => radiator_map_t( error )
     if (has_error_occurred( error, errmsg, errcode )) then
       call tuvx_deallocate( grids, profiles, null(), null(), height_grid, &
@@ -242,6 +333,10 @@ contains
                       photolysis_wavelength_grid_interfaces,         &
                       extraterrestrial_flux,                         &
                       standard_gravitational_acceleration,           &
+                      fixed_species_density,                         &
+                      species_volume_mixing_ratio,                   &
+                      above_column_density,                          &
+                      index_air, index_O2, index_O3,                 &
                       rate_parameters, errmsg, errcode)
     use musica_util,                            only: error_t
     use musica_ccpp_tuvx_height_grid,           only: set_height_grid_values, calculate_heights
@@ -270,7 +365,6 @@ contains
     real(kind_phys),    intent(inout) :: rate_parameters(:,:,:)                            ! various units (column, layer, reaction)
     character(len=512), intent(out)   :: errmsg
     integer,            intent(out)   :: errcode
-
 
     ! local variables
     real(kind_phys), dimension(size(geopotential_height_wrt_surface_at_midpoint, dim = 2))  :: height_midpoints
@@ -310,15 +404,10 @@ contains
                                    surface_temperature(i_col), errmsg, errcode )
       if (errcode /= 0) return
 
-      !!!!!!
-      !!!!!!
-      !!!!!
-      call set_gas_species_values( air_profile, oxygen_profile, ozone_profile,  &
-            fixed_species_density, species_volume_mixing, above_column_density, &
+      call set_gas_species_values( air_profile, oxygen_profile, ozone_profile,        &
+            fixed_species_density, species_volume_mixing_ratio, above_column_density, &
             index_air, index_O2, index_O3, errmsg, errcode )
 
-      !!!!!
-      !!!
       ! temporary values until these are available from the host model
       solar_zenith_angle = 0.0_kind_phys
       earth_sun_distance = 1.0_kind_phys

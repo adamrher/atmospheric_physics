@@ -1,10 +1,24 @@
 module musica_ccpp_tuvx_util
+  use ccpp_kinds, only: kind_phys
+
   implicit none
 
   private
-  public :: tuvx_deallocate
+  public :: radiatively_active_gas_t, tuvx_deallocate
 
 contains
+  type :: radiatively_active_gas_t
+    integer :: index
+    real(kind_phys) :: molar_mass
+    real(kind_phys) :: scale_height
+  contains
+    ! Get species properties
+    procedure :: get_species_index
+    procedure :: get_molar_mass
+    procedure :: get_scale_height
+    ! Deallocate the micm instance
+    final :: finalize ! TODO(jiwon) do we need this?
+  end type radiatively_active_gas_t
 
   !> This is a helper subroutine created to deallocate objects associated with TUV-x
   subroutine tuvx_deallocate(grids, profiles, radiators, tuvx, height_grid, &

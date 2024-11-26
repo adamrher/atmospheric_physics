@@ -333,6 +333,7 @@ contains
 
   !> Calculates photolysis rate constants for the current model conditions
   subroutine tuvx_run(temperature, dry_air_density,                  &
+                      O2_constituent, O3_constituent,                &
                       geopotential_height_wrt_surface_at_midpoint,   &
                       geopotential_height_wrt_surface_at_interface,  &
                       surface_geopotential, surface_temperature,     &
@@ -344,7 +345,6 @@ contains
                       fixed_species_density,                         &
                       species_volume_mixing_ratio,                   &
                       above_column_density,                          &
-                      index_air, index_O2, index_O3,                 &
                       rate_parameters, errmsg, errcode)
     use musica_util,                            only: error_t
     use musica_ccpp_tuvx_height_grid,           only: set_height_grid_values, calculate_heights
@@ -367,9 +367,6 @@ contains
     real(kind_phys),    intent(in)    :: fixed_species_density                             ! molecule cm-3
     real(kind_phys),    intent(in)    :: species_volume_mixing_ratio                       ! mol mol-1
     real(kind_phys),    intent(in)    :: above_column_density                              ! molecule cm-2
-    integer,            intent(in)    :: index_air
-    integer,            intent(in)    :: index_O2
-    integer,            intent(in)    :: index_O3
     real(kind_phys),    intent(inout) :: rate_parameters(:,:,:)                            ! various units (column, layer, reaction)
     character(len=512), intent(out)   :: errmsg
     integer,            intent(out)   :: errcode
@@ -412,9 +409,13 @@ contains
                                    surface_temperature(i_col), errmsg, errcode )
       if (errcode /= 0) return
 
-      call set_gas_species_values( air_profile, oxygen_profile, ozone_profile,        &
+      !!!!
+      !!!!
+      call set_gas_species_values( O2_profile, O3_profile,        &
             fixed_species_density, species_volume_mixing_ratio, above_column_density, &
             index_air, index_O2, index_O3, errmsg, errcode )
+      !!!!
+      !!!!
 
       ! temporary values until these are available from the host model
       solar_zenith_angle = 0.0_kind_phys

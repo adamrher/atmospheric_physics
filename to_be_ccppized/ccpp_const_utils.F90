@@ -33,16 +33,16 @@ contains
     ! This convoluted loop is brought to you in exchange for avoiding a
     ! circular dependency on cam_ccpp_cap::cam_const_get_index.
     const_props_loop: do t_cindex = lbound(constituent_props, 1), ubound(constituent_props, 1)
-       call constituent_props(t_cindex)%standard_name(t_const_name, errflg, errmsg)
-       if (errflg /= 0) then
-          ! Abort subroutine and return with error.
-          return
-       end if
+      call constituent_props(t_cindex)%standard_name(t_const_name, errflg, errmsg)
+      if (errflg /= 0) then
+        ! Abort subroutine and return with error.
+        return
+      end if
 
-       if (trim(t_const_name) == trim(name)) then
-          cindex = t_cindex
-          exit const_props_loop
-       end if
+      if (trim(t_const_name) == trim(name)) then
+        cindex = t_cindex
+        exit const_props_loop
+      end if
     enddo const_props_loop
 
   end subroutine ccpp_const_get_idx

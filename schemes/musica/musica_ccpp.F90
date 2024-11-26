@@ -55,13 +55,14 @@ contains
   !! The standard name for the variable 'surface_temperature' is
   !! 'blackbody_temperature_at_surface' because this is what we have as
   !! the standard name for 'cam_in%ts', whcih represents the same quantity.
-  subroutine musica_ccpp_run(time_step, temperature, pressure, dry_air_density, constituent_props,   &
-                             constituents, geopotential_height_wrt_surface_at_midpoint,              &
-                             geopotential_height_wrt_surface_at_interface, surface_geopotential,     &
-                             surface_temperature, surface_albedo,                                    &
-                             number_of_photolysis_wavelength_grid_sections,                          &
-                             photolysis_wavelength_grid_interfaces, extraterrestrial_flux, &
-                             standard_gravitational_acceleration, errmsg, errcode)
+  subroutine musica_ccpp_run(time_step, temperature, pressure, dry_air_density, constituent_props, &
+                             constituents, geopotential_height_wrt_surface_at_midpoint,            &
+                             geopotential_height_wrt_surface_at_interface, surface_geopotential,   &
+                             surface_temperature, surface_albedo,                                  &
+                             number_of_photolysis_wavelength_grid_sections,                        &
+                             photolysis_wavelength_grid_interfaces, extraterrestrial_flux,         &
+                             standard_gravitational_acceleration,errmsg, errcode)
+
     use ccpp_constituent_prop_mod, only: ccpp_constituent_prop_ptr_t
     use ccpp_kinds,                only: kind_phys
     use musica_ccpp_micm,          only: number_of_rate_parameters
@@ -87,27 +88,21 @@ contains
     integer,                 intent(out)   :: errcode
 
     ! local variables
-    real(kind_phys), dimension(size(constituents, dim=3))    :: molar_mass_arr    ! kg mol-1
+    real(kind_phys), dimension(size(constituents, dim=3))   :: molar_mass_arr  ! kg mol-1
     real(kind_phys), dimension(size(constituents, dim=1), &
                                size(constituents, dim=2), &
-                               number_of_rate_parameters)    :: rate_parameters ! various units
-    integer :: i_elem
+                               number_of_rate_parameters)   :: rate_parameters ! various units
+    real(kind_phys), dimension(size(constituents, dim=1), &
+                               size(constituents, dim=2))   :: O2_constituent  ! mol m-3
+    real(kind_phys), dimension(size(constituents, dim=1), &
+                               size(constituents, dim=2))   :: O3_constituent  ! mol m-3
+    character(len=2) :: O2_name = "O2"
+    character(len=2) :: O3_name = "O3"
+    integer          :: index_O2, index_O3
+    integer          :: i_elem
 
-    ! Calculate photolysis rate constants using TUV-x
-    call tuvx_run(temperature, dry_air_density,                  &
-                  geopotential_height_wrt_surface_at_midpoint,   &
-                  geopotential_height_wrt_surface_at_interface,  &
-                  surface_geopotential, surface_temperature,     &
-                  surface_albedo,                                &
-                  number_of_photolysis_wavelength_grid_sections, &
-                  photolysis_wavelength_grid_interfaces,         &
-                  extraterrestrial_flux,                         &
-                  standard_gravitational_acceleration,           &
-                  rate_parameters,                               &
-                  errmsg, errcode)
-
-    ! Get the molar mass that is set in the call to instantiate()
-    do i_elem = 1, size(molar_mass_arr)
+    ! TODO(jiwon) - Should we avoid rewriting error message and instead propogate the message 
+    ! from the preivous call? This question is applicable to the code below. (get O2, O3)
       call constituent_props(i_elem)%molar_mass(molar_mass_arr(i_elem), errcode, errmsg)
       if (errcode /= 0) then
         errmsg = "[MUSICA Error] Unable to get molar mass."
@@ -127,6 +122,35 @@ contains
 
     ! Convert CAM-SIMA unit to MICM unit (kg kg-1  ->  mol m-3)
     call convert_to_mol_per_cubic_meter(dry_air_density, molar_mass_arr, constituents)
+
+    ! Search O2 and O3 index
+    call ccpp_const_get_idx(constituent_props, O2_name, O2_index, errmsg, errcode)
+    if (errcode /= 0) then
+      errmsg = "[MUSICA Error] 'O2' was not found in the constituent properties."
+      return
+    end if
+
+    call ccpp_const_get_idx(constituent_props, O3_name, O3_index, errmsg, errcode)
+    if (errcode /= 0) then
+      errmsg = "[MUSICA Error] 'O3' was not found in the constituent properties."
+      return
+    end if
+
+    O2_constituent = constituents(O2_name, :, :) ! TODO(jiwon) confirm this
+    O3_constituent = constituents(O3_name, :, :)
+
+    ! Calculate photolysis rate constants using TUV-x
+    call tuvx_run(temperature, dry_air_density,                  &
+                  O2_constituent, O3_constituent,                &
+                  geopotential_height_wrt_surface_at_midpoint,   &
+                  geopotential_height_wrt_surface_at_interface,  &
+                  surface_geopotential, surface_temperature,     &
+                  surface_albedo,                                &
+                  number_of_photolysis_wavelength_grid_sections, &
+                  photolysis_wavelength_grid_interfaces,         &
+                  extraterrestrial_flux,                         &
+                  standard_gravitational_acceleration,           &
+                  rate_parameters, errmsg, errcode)
 
     ! Solve chemistry at the current time step
     call micm_run(time_step, temperature, pressure, dry_air_density, rate_parameters, &

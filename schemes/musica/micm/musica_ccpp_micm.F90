@@ -15,6 +15,23 @@ module musica_ccpp_micm
   type(micm_t), pointer  :: micm => null( )
   integer :: number_of_rate_parameters = 0
 
+  type :: parameterized_species_t
+    character(len=*) :: species_name
+    real(kind=kind_phys) :: value
+  end type
+
+  ! TODO: Naming
+  type :: profile_added_species_t
+    character(len=*) :: species_name
+    character(len=*) :: label
+    character(len=*) :: unit
+  end type
+
+  ! H, M, O, O2, O3, N2, H2O
+  integer :: num_parameterized_species
+  type(parameterized_species_t), allocatable :: parameterized_species(:)
+  type(profile_added_species_t), allocatable :: species_to_add_profiles(:)
+
 contains
 
   !> Registers MICM constituent properties with the CCPP
@@ -34,8 +51,25 @@ contains
     type(error_t)                 :: error
     real(kind=kind_phys)          :: molar_mass
     character(len=:), allocatable :: species_name
+    character(len=:)              :: invariant_species(5) = ['M', 'O2', 'O3', 'N2', 'H2O']
+    logical                       :: seen_invarinat_species(5) = &
+                                    .false., .false., .false., .false., .false.
     logical                       :: is_advected
-    integer                       :: i, species_index
+    integer                       :: i, i_invariant, species_index
+    ! is_parameterized array
+
+    ! is_parameterized add this in the configuration
+ 
+    ! init function
+    ! sue siwthch to ME, N2 O2 ..
+    ! set them
+
+    ! read configuration file
+    ! O2, O3 needs profile
+    ! give the index to tuvx
+
+    ! TODO - Add air, O, O3
+    species_to_add_profiles(:)
 
     micm => micm_t(trim(filename_of_micm_configuration), solver_type, num_grid_cells, error)
     if (has_error_occurred(error, errmsg, errcode)) return
@@ -51,14 +85,30 @@ contains
       species_name = map%name(i)
       species_index = map%index(i)
 
+      is_parameterized = micm%get_species_property_bool(species_name, &
+                                                        "__is parameterized", &
+                                                        error)
+      if (has_error_occurred(error, errmsg, errcode)) return
+      ! if parameterized, we have to set their values in initi function
+      if (is_parameterized) then
+        vec.push_back(species_name)
+      end if
+
+      ! TODO - add is_added_profile
+      is_parameterized = micm%get_species_property_bool(species_name, &
+                                                        "__enable profile", &
+                                                        error)
+
       molar_mass = micm%get_species_property_double(species_name, &
                                                     "molecular weight [kg mol-1]", &
                                                     error)
       if (has_error_occurred(error, errmsg, errcode)) return
+
       is_advected = micm%get_species_property_bool(species_name, &
                                                    "__is advected", &
                                                    error)
       if (has_error_occurred(error, errmsg, errcode)) return
+      
 
       call constituent_props(species_index)%instantiate( &
         std_name = species_name, &
@@ -72,20 +122,27 @@ contains
         errcode = errcode, &
         errmsg = errmsg)
       if (errcode /= 0) return
+
+
     end associate ! map
     end do
+
     number_of_rate_parameters = micm%user_defined_reaction_rates%size()
 
   end subroutine micm_register
 
   !> Initializes MICM
-  subroutine micm_init(errmsg, errcode)
+  subroutine micm_init(constitudents, errmsg, errcode)
+    use ccpp_const_utils, only: ccpp_const_get_idx
     character(len=512), intent(out) :: errmsg
     integer,            intent(out) :: errcode
 
     errmsg = ''
     errcode = 0
 
+    ! Grab the constituent index by standard name 
+
+     ! sue siwthch to ME, N2 O2 .
   end subroutine micm_init
 
   !> Solves chemistry at the current time step
